@@ -1,1 +1,129 @@
-SISTEMA GANTT PRO
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Gestión de Obra PRO+</title>
+
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<style>
+body { font-family: Arial; margin: 30px; }
+input, button { margin: 5px; }
+canvas { max-width: 900px; margin-top: 40px; }
+</style>
+</head>
+
+<body>
+
+<h2>Gestión de Obra PRO+ (Curva S Real)</h2>
+
+<h3>Nueva tarea</h3>
+<input id="name" placeholder="Nombre tarea">
+<input id="start" type="date">
+<input id="end" type="date">
+<input id="cost" type="number" placeholder="Costo total">
+<button onclick="addTask()">Agregar</button>
+
+<div id="gantt"></div>
+
+<canvas id="curvaS"></canvas>
+
+<script>
+
+// 🔥 CONFIGURAR SUPABASE
+const supabaseUrl = "TU_URL";
+const supabaseKey = "TU_API_KEY";
+const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+let tasks = [];
+
+async function loadTasks() {
+const { data } = await supabaseClient.from("tasks").select("*");
+tasks = data;
+render();
+}
+
+async function addTask() {
+const task = {
+name: document.getElementById("name").value,
+start: document.getElementById("start").value,
+end: document.getElementById("end").value,
+cost: parseFloat(document.getElementById("cost").value),
+progress: 0
+};
+
+await supabaseClient.from("tasks").insert([task]);
+loadTasks();
+}
+
+function render() {
+document.getElementById("gantt").innerHTML = "";
+new Gantt("#gantt", tasks);
+
+calcularCurvaS();
+}
+
+// 🔷 FUNCIÓN PRO: DISTRIBUCIÓN REAL DE COSTOS
+function calcularCurvaS() {
+
+let flujoMensual = {};
+
+tasks.forEach(t => {
+
+let inicio = new Date(t.start);
+let fin = new Date(t.end);
+
+let duracion = (fin - inicio) / (1000 * 60 * 60 * 24) + 1;
+let costoDiario = t.cost / duracion;
+
+let fecha = new Date(inicio);
+
+while (fecha <= fin) {
+
+let mes = fecha.getFullYear() + "-" + String(fecha.getMonth()+1).padStart(2,'0');
+
+flujoMensual[mes] = (flujoMensual[mes] || 0) + costoDiario;
+
+fecha.setDate(fecha.getDate() + 1);
+}
+});
+
+let meses = Object.keys(flujoMensual).sort();
+
+let acumulado = [];
+let suma = 0;
+
+meses.forEach(m => {
+suma += flujoMensual[m];
+acumulado.push(Math.round(suma));
+});
+
+// 🔄 RESETEAR GRÁFICO
+if(window.chart) window.chart.destroy();
+
+window.chart = new Chart(document.getElementById("curvaS"), {
+type: "line",
+data: {
+labels: meses,
+datasets: [{
+label: "Curva S (Costo acumulado real)",
+data: acumulado,
+tension: 0.3
+}]
+}
+});
+
+console.log("Flujo mensual:", flujoMensual);
+}
+
+loadTasks();
+
+</script>
+
+</body>
+</html>
